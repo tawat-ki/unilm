@@ -10,11 +10,13 @@ from torch.nn.modules.loss import _Loss
 import torch.nn.functional as F
 from transformers import BertConfig
 
-from transformers.modeling_bert import \
+from transformers.models.bert.modeling_bert import \
     BertPreTrainedModel, BertSelfOutput, BertIntermediate, BertOutput, BertPredictionHeadTransform
-from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
-from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-from transformers.modeling_xlm_roberta import XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+from transformers.models.roberta.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
+from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+from transformers.models.xlm_roberta.modeling_xlm_roberta import XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
+from transformers.models.layoutlm.modeling_layoutlm import LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
+from transformers.models.layoutlmv3.modeling_layoutlmv3 import LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST
 
 from s2s_ft.config import BertForSeq2SeqConfig
 from s2s_ft.convert_state_dict import get_checkpoint_from_transformer_cache, state_dict_convert
@@ -60,23 +62,24 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
         a simple interface for dowloading and loading pretrained models.
     """
     config_class = BertForSeq2SeqConfig
-    supported_convert_pretrained_model_archive_map = {
-        "bert": BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        "roberta": ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
-        "xlm-roberta": XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP, 
-        "unilm": UNILM_PRETRAINED_MODEL_ARCHIVE_MAP,
-        "minilm": MINILM_PRETRAINED_MODEL_ARCHIVE_MAP,
-        "layoutlm": LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_MAP,
-    }
+
+    supported_convert_pretrained_model_archive_map = [
+            *ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            *BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            *XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            *LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            *LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST
+    ]
     base_model_prefix = "bert_for_seq2seq"
-    pretrained_model_archive_map = {
-        **ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
-        **XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP, 
-        **BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        **UNILM_PRETRAINED_MODEL_ARCHIVE_MAP,
-        **MINILM_PRETRAINED_MODEL_ARCHIVE_MAP,
-        **LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_MAP,
-    }
+
+    pretrained_model_archive_map = [
+            *ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            *BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            *XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            *LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            *LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST
+    ]
+
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -96,24 +99,26 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
         model_type = kwargs.pop('model_type', None)
         if model_type is not None and "state_dict" not in kwargs:
             if model_type in cls.supported_convert_pretrained_model_archive_map:
-                pretrained_model_archive_map = cls.supported_convert_pretrained_model_archive_map[model_type]
-                if pretrained_model_name_or_path in pretrained_model_archive_map:
+                pretrained_model_archive_map = model_type
+                if pretrained_model_name_or_path.split('/')[1] in pretrained_model_archive_map:
+                    print("load")
                     state_dict = get_checkpoint_from_transformer_cache(
-                        archive_file=pretrained_model_archive_map[pretrained_model_name_or_path],
+                        archive_file=pretrained_model_name_or_path,
                         pretrained_model_name_or_path=pretrained_model_name_or_path,
                         pretrained_model_archive_map=pretrained_model_archive_map,
                         cache_dir=kwargs.get("cache_dir", None), force_download=kwargs.get("force_download", None),
                         proxies=kwargs.get("proxies", None), resume_download=kwargs.get("resume_download", None),
                     )
-                    state_dict = state_dict_convert[model_type](state_dict)
+                    state_dict = state_dict_convert[model_type.split('-')[0]](state_dict)
                     kwargs["state_dict"] = state_dict
                 elif os.path.isfile(pretrained_model_name_or_path):
                     kwargs["state_dict"] = torch.load(pretrained_model_name_or_path, map_location='cpu')
+                else:
+                    raise ValueError
 
         if kwargs["state_dict"] is None:
             logger.info("s2s-ft does't support the model !")
             raise NotImplementedError()
-
         config = kwargs["config"]
         state_dict = kwargs["state_dict"]
         # initialize new position embeddings (From Microsoft/UniLM)
@@ -146,6 +151,9 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
                 state_dict[_k] = new_position_embedding.data
                 del new_position_embedding
 
+        print(f"!pretrained_model_name_or_path:{pretrained_model_name_or_path}")
+        print(f"!kwargs:{kwargs}")
+        print(f"!model_args:{model_args}")
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 

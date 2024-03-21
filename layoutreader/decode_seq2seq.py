@@ -18,7 +18,7 @@ from nltk.translate.bleu_score import sentence_bleu
 from tqdm import tqdm
 from transformers import \
     BertTokenizer, RobertaTokenizer
-from transformers.tokenization_bert import whitespace_tokenize
+from transformers.models.bert.tokenization_bert import whitespace_tokenize
 
 import s2s_ft.s2s_loader as seq2seq_loader
 from s2s_ft.modeling_decoding import LayoutlmForSeq2SeqDecoder, BertConfig
@@ -142,9 +142,11 @@ def main():
     if args.max_tgt_length >= args.max_seq_length - 2:
         raise ValueError("Maximum tgt length exceeds max seq length - 2.")
 
-    device = torch.device(
-        "cuda" if torch.cuda.is_available() else "cpu")
-    n_gpu = torch.cuda.device_count()
+    # device = torch.device(
+    #     "cuda" if torch.cuda.is_available() else "cpu")
+    # n_gpu = torch.cuda.device_count()
+    device = "cuda:0"
+    n_gpu = 1
 
     if args.seed > 0:
         random.seed(args.seed)
