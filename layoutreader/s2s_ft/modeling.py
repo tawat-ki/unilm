@@ -68,7 +68,9 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
             *BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             *XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             *LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            *LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST
+            *LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            "layoutlm",
+            "layoutlmv3"
     ]
     base_model_prefix = "bert_for_seq2seq"
 
@@ -100,7 +102,7 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
         if model_type is not None and "state_dict" not in kwargs:
             if model_type in cls.supported_convert_pretrained_model_archive_map:
                 pretrained_model_archive_map = model_type
-                if pretrained_model_name_or_path.split('/')[1] in pretrained_model_archive_map:
+                if pretrained_model_name_or_path.split('/')[-1] in pretrained_model_archive_map:
                     print("load")
                     state_dict = get_checkpoint_from_transformer_cache(
                         archive_file=pretrained_model_name_or_path,
@@ -121,10 +123,13 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
             raise NotImplementedError()
         config = kwargs["config"]
         state_dict = kwargs["state_dict"]
+        print(f"config_before:{config}")
         # initialize new position embeddings (From Microsoft/UniLM)
         _k = 'bert.embeddings.position_embeddings.weight'
         if _k in state_dict:
+            print(f"hi from edit config{config.max_position_embeddings}:{state_dict[_k].shape}")
             if config.max_position_embeddings > state_dict[_k].shape[0]:
+                print("edit more")
                 logger.info("Resize > position embeddings !")
                 old_vocab_size = state_dict[_k].shape[0]
                 new_position_embedding = state_dict[_k].data.new_tensor(torch.ones(
@@ -141,6 +146,7 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
                 state_dict[_k] = new_position_embedding.data
                 del new_position_embedding
             elif config.max_position_embeddings < state_dict[_k].shape[0]:
+                print("edit less")
                 logger.info("Resize < position embeddings !")
                 old_vocab_size = state_dict[_k].shape[0]
                 new_position_embedding = state_dict[_k].data.new_tensor(torch.ones(
@@ -150,9 +156,9 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
                 new_position_embedding.data.copy_(state_dict[_k][:config.max_position_embeddings, :])
                 state_dict[_k] = new_position_embedding.data
                 del new_position_embedding
-
+        print(f"config_after:{config}")
         print(f"!pretrained_model_name_or_path:{pretrained_model_name_or_path}")
-        print(f"!kwargs:{kwargs}")
+        # print(f"!kwargs:{kwargs}")
         print(f"!model_args:{model_args}")
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
@@ -693,10 +699,12 @@ class LayoutlmSPOnlyMLMHead(nn.Module):
 
 class LayoutlmForSequenceToSequence(BertPreTrainedForSeq2SeqModel):
     def __init__(self, config):
+        print("i was init by LayoutlmForSequenceToSequence:",config)
         super(LayoutlmForSequenceToSequence, self).__init__(config)
-        if config.base_model_type == 'layoutlm':
+        if 'layoutlm' in config.base_model_type:
             self.bert = LayoutlmModel(config)
         else:
+            raise ValueError
             self.bert = BertModel(config)
         self.cls = LayoutlmSPOnlyMLMHead(config, src_len=config.max_source_length)
         self.init_weights()
@@ -747,7 +755,7 @@ class LayoutlmForSequenceToSequence(BertPreTrainedForSeq2SeqModel):
         assert source_len > 0 and target_len > 0
         split_lengths = (source_len, target_len, pseudo_len)
 
-        if self.config.base_model_type == 'layoutlm':
+        if 'layoutlm' in self.config.base_model_type:
             source_xys = source_idxys[:, :, 1:]
             target_xys = target_idxys[:, :, 1:]
             pseudo_xys = pseudo_idxys[:, :, 1:]
@@ -779,11 +787,12 @@ class LayoutlmForSequenceToSequence(BertPreTrainedForSeq2SeqModel):
             target_span_ids = target_position_ids
         attention_mask = self.create_attention_mask(source_mask, target_mask, source_position_ids, target_span_ids)
 
-        if self.config.base_model_type == 'layoutlm':
+        if  'layoutlm' in self.config.base_model_type:
             outputs = self.bert(
                 input_ids, input_xys, attention_mask=attention_mask, token_type_ids=token_type_ids,
                 position_ids=position_ids, split_lengths=split_lengths, return_emb=True)
         else:
+            raise ValueError
             outputs = self.bert(
                 input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids,
                 position_ids=position_ids, split_lengths=split_lengths, return_emb=True)

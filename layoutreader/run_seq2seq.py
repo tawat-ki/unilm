@@ -42,6 +42,7 @@ MODEL_CLASSES = {
     'xlm-roberta': (XLMRobertaConfig, XLMRobertaTokenizer),
     'unilm': (UnilmConfig, UnilmTokenizer),
     'layoutlm': (LayoutlmConfig, BertTokenizer),
+    'layoutlm-base-uncased': (LayoutlmConfig, BertTokenizer),
 }
 
 
@@ -121,7 +122,7 @@ def train(args, training_features, model, tokenizer):
         cls_id=tokenizer.cls_token_id, sep_id=tokenizer.sep_token_id, pad_id=tokenizer.pad_token_id,
         mask_id=tokenizer.mask_token_id, random_prob=args.random_prob, keep_prob=args.keep_prob,
         offset=train_batch_size * global_step, num_training_instances=train_batch_size * args.num_training_steps,
-        layout_flag=args.model_type == 'layoutlm'
+        layout_flag='layoutlm' in args.model_type
     )
 
     logger.info("Check dataset:")
@@ -388,14 +389,15 @@ def get_model_and_tokenizer(args):
 
     logger.info("Model config for seq2seq: %s", str(config))
 
-    if args.model_type == 'layoutlm':
+    if 'layoutlm' in args.model_type :
         if args.tokenizer_name is not None:
             tokenizer_name = args.tokenizer_name
         else:
-            tokenizer_name = 'bert' + args.model_name_or_path[8:]
+            tokenizer_name = 'bert-base-uncased'
         tokenizer = tokenizer_class.from_pretrained(
             tokenizer_name, do_lower_case=args.do_lower_case, cache_dir=args.cache_dir if args.cache_dir else None)
     else:
+        raise ValueError
         tokenizer = tokenizer_class.from_pretrained(
             args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
             do_lower_case=args.do_lower_case, cache_dir=args.cache_dir if args.cache_dir else None)
@@ -405,8 +407,8 @@ def get_model_and_tokenizer(args):
         reuse_position_embedding=True,
         cache_dir=args.cache_dir if args.cache_dir else None,
     )
-    print(model)
-    exit()
+    #print(model)
+    #exit()
 
     return model, tokenizer
 
@@ -433,13 +435,13 @@ def main():
         training_features = utils.load_and_cache_line_order_examples(
             example_path=example_path, tokenizer=tokenizer, local_rank=args.local_rank,
             cached_features_file=args.cached_train_features_file, max_src_length=args.max_source_seq_length,
-            layout_flag=args.model_type == 'layoutlm', shuffle=True,
+            layout_flag='layoutlm' in args.model_type, shuffle=True,
             src_shuffle_rate=args.sentence_shuffle_rate)
     else:
         training_features = utils.load_and_cache_layoutlm_examples(
             example_path=example_path, tokenizer=tokenizer, local_rank=args.local_rank,
             cached_features_file=args.cached_train_features_file, max_src_length=args.max_source_seq_length,
-            layout_flag=args.model_type == 'layoutlm', shuffle=True,
+            layout_flag='layoutlm' in args.model_type, shuffle=True,
             src_shuffle_rate=args.sentence_shuffle_rate
         )
 
