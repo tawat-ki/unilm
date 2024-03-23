@@ -74,6 +74,8 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
             *XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             *LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             *LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            *[v.split('/')[-1] for v in LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST],
+            *[v.split('/')[-1] for v in LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST],
             "layoutlm",
             "layoutlmv3"
     ]
@@ -107,7 +109,7 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
         if model_type is not None and "state_dict" not in kwargs:
             if model_type in cls.supported_convert_pretrained_model_archive_map:
                 pretrained_model_archive_map = model_type
-                if pretrained_model_name_or_path.split('/')[-1] in pretrained_model_archive_map:
+                if True:
                     state_dict = get_checkpoint_from_transformer_cache(
                         archive_file=pretrained_model_name_or_path,
                         pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -115,7 +117,10 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
                         cache_dir=kwargs.get("cache_dir", None), force_download=kwargs.get("force_download", None),
                         proxies=kwargs.get("proxies", None), resume_download=kwargs.get("resume_download", None),
                     )
-                    state_dict = state_dict_convert[model_type.split('-')[0]](state_dict)
+                    if 'layoutlm' in model_type:
+                        state_dict = state_dict_convert['layoutlm'](state_dict)
+                    else:
+                        state_dict = state_dict_convert[model_type](state_dict)
                     kwargs["state_dict"] = state_dict
                 elif os.path.isfile(pretrained_model_name_or_path):
                     kwargs["state_dict"] = torch.load(pretrained_model_name_or_path, map_location='cpu')
@@ -131,13 +136,10 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
             raise NotImplementedError()
         config = kwargs["config"]
         state_dict = kwargs["state_dict"]
-        print(f"config_before:{config}")
         # initialize new position embeddings (From Microsoft/UniLM)
         _k = 'bert.embeddings.position_embeddings.weight'
         if _k in state_dict:
-            print(f"hi from edit config{config.max_position_embeddings}:{state_dict[_k].shape}")
             if config.max_position_embeddings > state_dict[_k].shape[0]:
-                print("edit more")
                 logger.info("Resize > position embeddings !")
                 old_vocab_size = state_dict[_k].shape[0]
                 new_position_embedding = state_dict[_k].data.new_tensor(torch.ones(
@@ -154,7 +156,6 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
                 state_dict[_k] = new_position_embedding.data
                 del new_position_embedding
             elif config.max_position_embeddings < state_dict[_k].shape[0]:
-                print("edit less")
                 logger.info("Resize < position embeddings !")
                 old_vocab_size = state_dict[_k].shape[0]
                 new_position_embedding = state_dict[_k].data.new_tensor(torch.ones(
@@ -164,10 +165,6 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
                 new_position_embedding.data.copy_(state_dict[_k][:config.max_position_embeddings, :])
                 state_dict[_k] = new_position_embedding.data
                 del new_position_embedding
-        print(f"config_after:{config}")
-        print(f"!pretrained_model_name_or_path:{pretrained_model_name_or_path}")
-        # print(f"!kwargs:{kwargs}")
-        print(f"!model_args:{model_args}")
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
@@ -752,19 +749,17 @@ class LayoutlmSPOnlyMLMHead(nn.Module):
 
 class LayoutlmForSequenceToSequence(BertPreTrainedForSeq2SeqModel):
     def __init__(self, config):
-        print("i was init by LayoutlmForSequenceToSequence:",config)
         super(LayoutlmForSequenceToSequence, self).__init__(config)
-        if 'layoutlm' == config.base_model_type or 'layoutlm-base-uncased' == config.base_model_type:
-            self.bert = LayoutlmModel(config)
-        elif 'layoutlmv3' == config.base_model_type:
+        if 'layoutlmv3' in config.base_model_type:
+            config.has_relative_attention_bias=False
+            self.bert = LayoutLMv3Model(config)
+        elif'layoutlm' in config.base_model_type:
             # config_ = LayoutLMv3Config()
+            self.bert = LayoutlmModel(config)
             # config_.visual_embed = False 
             # config_.max_position_embeddings = 2048
             # self.processor = LayoutLMv3Processor()
-            print(config)
-            self.bert = LayoutLMv3Model(config)
         else:
-            raise ValueError
             self.bert = BertModel(config)
         self.cls = LayoutlmSPOnlyMLMHead(config, src_len=config.max_source_length)
         self.init_weights()
@@ -848,15 +843,14 @@ class LayoutlmForSequenceToSequence(BertPreTrainedForSeq2SeqModel):
             target_span_ids = target_position_ids
         attention_mask = self.create_attention_mask(source_mask, target_mask, source_position_ids, target_span_ids)
 
-        if  'layoutlm' == self.config.base_model_type or 'layoutlm-base-uncased' == self.config.base_model_type:
+        if 'layoutlmv3' in self.config.base_model_type:
+            outputs = self.bert(
+                input_ids, input_xys, attention_mask=attention_mask, token_type_ids=token_type_ids,
+                position_ids=position_ids, return_dict=False)
+        elif 'layoutlm' in self.config.base_model_type:
             outputs = self.bert(
                 input_ids, input_xys, attention_mask=attention_mask, token_type_ids=token_type_ids,
                 position_ids=position_ids, split_lengths=split_lengths, return_emb=True)
-
-        elif  'layoutlmv3' == self.config.base_model_type:
-            outputs = self.bert(
-                input_ids, input_xys, attention_mask=attention_mask, token_type_ids=token_type_ids,
-                return_dict=False)
         else:
             outputs = self.bert(
                 input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids,

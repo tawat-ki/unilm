@@ -45,6 +45,7 @@ MODEL_CLASSES = {
     'layoutlm': (LayoutlmConfig, BertTokenizer),
     'layoutlm-base-uncased': (LayoutlmConfig, BertTokenizer),
     'layoutlmv3': (LayoutLMv3Config, BertTokenizer),
+    'layoutlmv3-base': (LayoutLMv3Config, BertTokenizer),
 }
 
 
@@ -381,8 +382,8 @@ def get_model_and_tokenizer(args):
     config_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     model_config = config_class.from_pretrained(
         args.config_name if args.config_name else args.model_name_or_path,
-        cache_dir=args.cache_dir if args.cache_dir else None, visual_embed=False, text_embed=True)
-    print("feature config:",model_config)
+        cache_dir=args.cache_dir if args.cache_dir else None, visual_embed=False, text_embed=True, type_vocab_size=2)
+
     config = BertForSeq2SeqConfig.from_exist_config(
         config=model_config, label_smoothing=args.label_smoothing,
         max_position_embeddings=args.max_source_seq_length + args.max_target_seq_length,
@@ -406,14 +407,12 @@ def get_model_and_tokenizer(args):
             args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
             do_lower_case=args.do_lower_case, cache_dir=args.cache_dir if args.cache_dir else None)
 
-    # model = LayoutlmForSequenceToSequence.from_pretrained(
-    #     args.model_name_or_path, config=config, model_type=args.model_type,
-    #     reuse_position_embedding=True,
-    #     cache_dir=args.cache_dir if args.cache_dir else None,
-    # )
-    model = LayoutlmForSequenceToSequence(config=config)
-    # print(model)
-    # exit()
+    model = LayoutlmForSequenceToSequence.from_pretrained(
+        args.model_name_or_path, config=config, model_type=args.model_type,
+        reuse_position_embedding=True,
+        cache_dir=args.cache_dir if args.cache_dir else None,
+    )
+    # model = LayoutlmForSequenceToSequence(config=config)
 
     return model, tokenizer
 
