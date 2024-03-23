@@ -34,8 +34,9 @@ class BertForSeq2SeqConfig(BertConfig):
             kwargs["max_position_embeddings"] = kwargs["max_position_embeddings"] - 2
         
         additional_keys = [
-            "source_type_id", "target_type_id"
+            "source_type_id", "target_type_id", "bos_token_id", "coordinate_size", "eos_token_id", "has_relative_attention_bias", "has_spatial_attention_bias", "input_size", "max_rel_2d_pos", "max_rel_pos", "num_channels", "patch_size", "rel_2d_pos_bins", "rel_pos_bins", "second_input_size", "shape_size", "text_embed", "torch_dtype", "visual_embed",
         ]
+     
         for key in additional_keys:
             if hasattr(config, key):
                 kwargs[key] = getattr(config, key)

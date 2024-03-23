@@ -15,8 +15,13 @@ from transformers.models.bert.modeling_bert import \
 from transformers.models.roberta.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
 from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 from transformers.models.xlm_roberta.modeling_xlm_roberta import XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
-from transformers.models.layoutlm.modeling_layoutlm import LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
-from transformers.models.layoutlmv3.modeling_layoutlmv3 import LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST
+from transformers.models.layoutlm import LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
+from transformers.models.layoutlmv3 import (LayoutLMv3Processor,
+                                            LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
+                                            LayoutLMv3Model,
+                                            LayoutLMv3Config)
+from transformers.models.layoutlmv3.modeling_layoutlmv3 import LayoutLMv3TextEmbeddings
+
 
 from s2s_ft.config import BertForSeq2SeqConfig
 from s2s_ft.convert_state_dict import get_checkpoint_from_transformer_cache, state_dict_convert
@@ -103,7 +108,6 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
             if model_type in cls.supported_convert_pretrained_model_archive_map:
                 pretrained_model_archive_map = model_type
                 if pretrained_model_name_or_path.split('/')[-1] in pretrained_model_archive_map:
-                    print("load")
                     state_dict = get_checkpoint_from_transformer_cache(
                         archive_file=pretrained_model_name_or_path,
                         pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -117,6 +121,10 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
                     kwargs["state_dict"] = torch.load(pretrained_model_name_or_path, map_location='cpu')
                 else:
                     raise ValueError
+            else:
+                raise ValueError
+
+
 
         if kwargs["state_dict"] is None:
             logger.info("s2s-ft does't support the model !")
@@ -206,6 +214,37 @@ class BertEmbeddings(nn.Module):
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
+
+
+class LayoutLMv3TextEmbeddings_(LayoutLMv3TextEmbeddings):
+    def __init__(self, config):
+        super(LayoutLMv3TextEmbeddings_, self).__init__()
+
+        if not config.layoutlm_only_layout:
+            self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        else:
+            self.word_embeddings = None
+
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
+
+        self.padding_idx = config.pad_token_id
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
+        )
+
+        self.x_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.coordinate_size)
+        self.y_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.coordinate_size)
+        self.h_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.shape_size)
+        self.w_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.shape_size)
+        self.only_layout_flag = config.layoutlm_only_layout
 
 
 class LayoutlmEmbeddings(nn.Module):
@@ -583,6 +622,20 @@ class LayoutlmModel(BertPreTrainedForSeq2SeqModel):
                 inputs_embeds=None,
                 split_lengths=None,
                 return_emb=False):
+    # def forward(
+    #     self,
+    #     input_ids: Optional[torch.LongTensor] = None,
+    #     bbox: Optional[torch.LongTensor] = None,
+    #     attention_mask: Optional[torch.FloatTensor] = None,
+    #     token_type_ids: Optional[torch.LongTensor] = None,
+    #     position_ids: Optional[torch.LongTensor] = None,
+    #     head_mask: Optional[torch.FloatTensor] = None,
+    #     inputs_embeds: Optional[torch.FloatTensor] = None,
+    #     pixel_values: Optional[torch.FloatTensor] = None,
+    #     output_attentions: Optional[bool] = None,
+    #     output_hidden_states: Optional[bool] = None,
+    #     return_dict: Optional[bool] = None,
+    # ) -> Union[Tuple, BaseModelOutput]:
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -701,8 +754,15 @@ class LayoutlmForSequenceToSequence(BertPreTrainedForSeq2SeqModel):
     def __init__(self, config):
         print("i was init by LayoutlmForSequenceToSequence:",config)
         super(LayoutlmForSequenceToSequence, self).__init__(config)
-        if 'layoutlm' in config.base_model_type:
+        if 'layoutlm' == config.base_model_type or 'layoutlm-base-uncased' == config.base_model_type:
             self.bert = LayoutlmModel(config)
+        elif 'layoutlmv3' == config.base_model_type:
+            # config_ = LayoutLMv3Config()
+            # config_.visual_embed = False 
+            # config_.max_position_embeddings = 2048
+            # self.processor = LayoutLMv3Processor()
+            print(config)
+            self.bert = LayoutLMv3Model(config)
         else:
             raise ValueError
             self.bert = BertModel(config)
@@ -748,6 +808,7 @@ class LayoutlmForSequenceToSequence(BertPreTrainedForSeq2SeqModel):
 
     def forward(self, source_idxys, target_idxys, target_index, pseudo_idxys, num_source_tokens, num_target_tokens,
                 target_span_ids=None):
+        # exit()
         source_len = source_idxys.size(1)
         target_len = target_idxys.size(1)
         pseudo_len = pseudo_idxys.size(1)
@@ -787,12 +848,16 @@ class LayoutlmForSequenceToSequence(BertPreTrainedForSeq2SeqModel):
             target_span_ids = target_position_ids
         attention_mask = self.create_attention_mask(source_mask, target_mask, source_position_ids, target_span_ids)
 
-        if  'layoutlm' in self.config.base_model_type:
+        if  'layoutlm' == self.config.base_model_type or 'layoutlm-base-uncased' == self.config.base_model_type:
             outputs = self.bert(
                 input_ids, input_xys, attention_mask=attention_mask, token_type_ids=token_type_ids,
                 position_ids=position_ids, split_lengths=split_lengths, return_emb=True)
+
+        elif  'layoutlmv3' == self.config.base_model_type:
+            outputs = self.bert(
+                input_ids, input_xys, attention_mask=attention_mask, token_type_ids=token_type_ids,
+                return_dict=False)
         else:
-            raise ValueError
             outputs = self.bert(
                 input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids,
                 position_ids=position_ids, split_lengths=split_lengths, return_emb=True)
@@ -822,4 +887,3 @@ class LayoutlmForSequenceToSequence(BertPreTrainedForSeq2SeqModel):
             masked_lm_loss.float(), target_mask)
 
         return pseudo_lm_loss
-
