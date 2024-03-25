@@ -309,7 +309,6 @@ def load_and_cache_examples(
 
         if local_rank in [-1, 0] and cached_features_file is not None:
             logger.info("Saving features into cached file %s", cached_features_file)
-            input("press any key to save")
             torch.save(features, cached_features_file)
 
     # Make sure only the first process in distributed training process the dataset, and the others will use the cache
@@ -413,6 +412,7 @@ def load_and_cache_layoutlm_examples(
     if cached_features_file is not None and os.path.exists(cached_features_file):
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
+        raise ValueError
     else:
         logger.info("Creating features from dataset at %s", example_path)
 
@@ -490,6 +490,7 @@ def load_and_cache_layoutlm_examples(
                 bleu = 0
 
             if random.random() < src_shuffle_rate:
+                raise ValueError("fix me!")
                 # print('Random!!!')
                 # DONE: the random src! here has bug! index also need shuffle
                 src_text = text['src']

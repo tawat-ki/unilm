@@ -11,7 +11,6 @@ def get_checkpoint_from_transformer_cache(
         cache_dir, force_download, proxies, resume_download,
 ):
     try:
-        print(archive_file)
         resolved_archive_file = cached_file(archive_file, filename="pytorch_model.bin", cache_dir=cache_dir, force_download=force_download,
                                             proxies=proxies, resume_download=resume_download)
     except EnvironmentError:
@@ -116,12 +115,30 @@ def hf_layoutlm_to_hf_bert(state_dict):
         new_state_dict[key] = value
     return new_state_dict
 
+def hf_layoutlmv3_to_hf_bert(state_dict):
+    logger.info(" * Convert Huggingface LayoutLMv3 format to Huggingface BERT format * ")
+
+    new_state_dict = {}
+    for key in state_dict:
+        value = state_dict[key]
+        if key.startswith('layoutlmv3'):
+            key = 'bert.' + key[11:]
+        elif key.startswith('cls'):
+            # NOTE: all cls states are used for prediction,
+            #   we predict the index so omit all pretrained states for prediction.
+            continue
+        new_state_dict[key] = value
+    return new_state_dict
+
 
 state_dict_convert = {
     'bert': hf_bert_to_hf_bert,
     'unilm': hf_bert_to_hf_bert, 
     'minilm': hf_bert_to_hf_bert,
     'layoutlm': hf_layoutlm_to_hf_bert,
+    'layoutlm-base-uncased': hf_layoutlm_to_hf_bert,
+    'layoutlmv3': hf_layoutlmv3_to_hf_bert,
+    'layoutlmv3-base': hf_layoutlmv3_to_hf_bert,
     'roberta': hf_roberta_to_hf_bert,
     'xlm-roberta': hf_roberta_to_hf_bert,
     'distilbert': hf_distilbert_to_hf_bert,

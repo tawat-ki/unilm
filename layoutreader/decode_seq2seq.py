@@ -204,7 +204,6 @@ def main():
             else:
                 w_list.append(w)
         forbid_ignore_set = set(tokenizer.convert_tokens_to_ids(w_list))
-    print(args.model_path)
     found_checkpoint_flag = False
     for model_recover_path in [args.model_path.strip()]:
         logger.info("***** Recover model: %s *****", model_recover_path)

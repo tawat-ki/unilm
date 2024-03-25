@@ -109,7 +109,7 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
         if model_type is not None and "state_dict" not in kwargs:
             if model_type in cls.supported_convert_pretrained_model_archive_map:
                 pretrained_model_archive_map = model_type
-                if True:
+                if pretrained_model_name_or_path in (LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST+LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST+['microsoft/layoutlm-base-uncased']): 
                     state_dict = get_checkpoint_from_transformer_cache(
                         archive_file=pretrained_model_name_or_path,
                         pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -117,12 +117,10 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
                         cache_dir=kwargs.get("cache_dir", None), force_download=kwargs.get("force_download", None),
                         proxies=kwargs.get("proxies", None), resume_download=kwargs.get("resume_download", None),
                     )
-                    if 'layoutlm' in model_type:
-                        state_dict = state_dict_convert['layoutlm'](state_dict)
-                    else:
-                        state_dict = state_dict_convert[model_type](state_dict)
+                    state_dict = state_dict_convert[model_type](state_dict)
                     kwargs["state_dict"] = state_dict
                 elif os.path.isfile(pretrained_model_name_or_path):
+                    raise ValueError
                     kwargs["state_dict"] = torch.load(pretrained_model_name_or_path, map_location='cpu')
                 else:
                     raise ValueError
@@ -138,7 +136,7 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
         state_dict = kwargs["state_dict"]
         # initialize new position embeddings (From Microsoft/UniLM)
         _k = 'bert.embeddings.position_embeddings.weight'
-        if _k in state_dict:
+        if _k in state_dict and 'layoutlmv3' not in pretrained_model_name_or_path:
             if config.max_position_embeddings > state_dict[_k].shape[0]:
                 logger.info("Resize > position embeddings !")
                 old_vocab_size = state_dict[_k].shape[0]
@@ -165,7 +163,7 @@ class BertPreTrainedForSeq2SeqModel(BertPreTrainedModel):
                 new_position_embedding.data.copy_(state_dict[_k][:config.max_position_embeddings, :])
                 state_dict[_k] = new_position_embedding.data
                 del new_position_embedding
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs, ignore_mismatched_sizes=True)
 
 
 class BertEmbeddings(nn.Module):

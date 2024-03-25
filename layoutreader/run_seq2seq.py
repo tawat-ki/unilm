@@ -19,7 +19,7 @@ except:
 import tqdm
 
 from s2s_ft.modeling import LayoutlmForSequenceToSequence, LayoutlmConfig
-from transformers.models.layoutlmv3 import LayoutLMv3Config
+from transformers.models.layoutlmv3 import LayoutLMv3Config, LayoutLMv3Tokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
 from transformers import \
     RobertaConfig, BertConfig, \
@@ -46,6 +46,7 @@ MODEL_CLASSES = {
     'layoutlm-base-uncased': (LayoutlmConfig, BertTokenizer),
     'layoutlmv3': (LayoutLMv3Config, BertTokenizer),
     'layoutlmv3-base': (LayoutLMv3Config, BertTokenizer),
+    'layoutlmv3-large': (LayoutLMv3Config, BertTokenizer),
 }
 
 
@@ -131,6 +132,7 @@ def train(args, training_features, model, tokenizer):
 
     logger.info("Check dataset:")
     for i in range(5):
+        break
         source_ids, target_ids, pseudo_ids, num_source_tokens, num_target_tokens, target_index = train_dataset.__getitem__(
             i)
         logger.info("Instance-%d" % i)
@@ -232,7 +234,7 @@ def train(args, training_features, model, tokenizer):
                         optim_to_save, os.path.join(args.output_dir, 'optim.{}.bin'.format(global_step)))
 
                     logger.info("Saving model checkpoint %d into %s", global_step, save_path)
-
+    
     if args.local_rank in [-1, 0] and tb_writer:
         tb_writer.close()
 
@@ -393,8 +395,9 @@ def get_model_and_tokenizer(args):
     )
 
     logger.info("Model config for seq2seq: %s", str(config))
-
-    if 'layoutlm' in args.model_type :
+    if 'layoutlmv3' in args.model_type and args.tokenizer_name is not None:
+        tokenizer = LayoutLMv3Tokenizer.from_pretrained(args.tokenizer_name)
+    elif 'layoutlm' in args.model_type :
         if args.tokenizer_name is not None:
             tokenizer_name = args.tokenizer_name
         else:
@@ -441,14 +444,18 @@ def main():
             cached_features_file=args.cached_train_features_file, max_src_length=args.max_source_seq_length,
             layout_flag='layoutlm' in args.model_type, shuffle=True,
             src_shuffle_rate=args.sentence_shuffle_rate)
+        raise ValueError  # TODO
     else:
         training_features = utils.load_and_cache_layoutlm_examples(
             example_path=example_path, tokenizer=tokenizer, local_rank=args.local_rank,
-            cached_features_file=args.cached_train_features_file, max_src_length=args.max_source_seq_length,
+            #cached_features_file=args.cached_train_features_file,
+            cached_features_file=None,  # TODO
+            max_src_length=args.max_source_seq_length,
             layout_flag='layoutlm' in args.model_type, shuffle=True,
+            #layoutv3_flag='layoutlmv3' in args.model_type, shuffle=True,
             src_shuffle_rate=args.sentence_shuffle_rate
         )
-
+    exit()
     train(args, training_features, model, tokenizer)
 
 
