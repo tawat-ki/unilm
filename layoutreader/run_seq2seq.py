@@ -455,7 +455,6 @@ def main():
             #layoutv3_flag='layoutlmv3' in args.model_type, shuffle=True,
             src_shuffle_rate=args.sentence_shuffle_rate
         )
-    exit()
     train(args, training_features, model, tokenizer)
 
 

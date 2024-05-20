@@ -401,7 +401,7 @@ def load_and_cache_line_order_examples(
 
 def load_and_cache_layoutlm_examples(
         example_path, tokenizer, local_rank, cached_features_file, max_src_length=1024,
-        layout_flag=True, shuffle=True,
+        layout_flag=True, shuffle=True, vision=True,
         src_shuffle_rate=0,
         file_info_flag=False
         ):
